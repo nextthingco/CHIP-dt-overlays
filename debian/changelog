@@ -1,3 +1,11 @@
+chip-dt-overlays (0.6) trixie; urgency=high
+
+  * Some debian/ file cleanups
+  * dtc Build-Depends
+  * Special thanks to Jon of jfpossibilities.com for making this possible by hosting an archive of these packages
+
+ -- Ben Young <computermouth@proton.me>  Thu, 04 Jun 2026 17:34:00 -0500
+
 chip-dt-overlays (0.5) jessie; urgency=high
 
   * Increment version number to cover old broken overlays
