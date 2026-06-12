@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * CHIP HDMI DIP -- Chrontel CH7033 RGB->HDMI bridge on i2c1 @ 0x76, fed by
+ * TCON0's parallel RGB565 output. Device-tree overlay ported to mainline
+ * sun5i-r8-chip (Linux 6.12) from NextThing's nextthingco/dip-hdmi.dts.
+ *
+ * Pipeline: be0 -> tcon0 (RGB565) -> ch7033 -> hdmi-connector.
+ * Needs CONFIG_DRM_CHRONTEL_CH7033 (added to nand.cfg) and a base dtb built with
+ * `dtc -@`. External labels: &i2c1, &i2c1_pins, &tcon0, &tcon0_out.
+ *
+ * Mainline fixups vs the 4.4-era original:
+ *   - i2c1 pin group: i2c1_pins_a -> i2c1_pins
+ *   - base &i2c1 ships status="disabled" -> enable it here
+ *   - dropped the /aliases i2c1 fragment (mainline references &i2c1 directly)
+ *   - modern ch7033 binding: ports{port@0 in, port@1 out} + an explicit
+ *     hdmi-connector (the old overlay only had the input port)
+ *   - tcon0_out endpoint@0 (reg 0 = RGB channel) sits beside the base's
+ *     endpoint@1 (composite/TVE, channel 1) -- no collision
+ *
+ * dtc emits one expected warning (graph_child_address) on the &tcon0_out
+ * endpoint: compiled in isolation it sees a single endpoint, but the base port
+ * already carries the composite endpoint, so the cells are needed post-merge.
+ *
+ * UNVERIFIED on hardware: mainline sun5i parallel-RGB + external bridge is
+ * lightly used; the graph/connector wiring may need iteration with the DIP.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	hdmi_connector: hdmi-connector {
+		compatible = "hdmi-connector";
+		type = "a";
+		ddc-i2c-bus = <&i2c1>;
+
+		port {
+			hdmi_con_in: endpoint {
+				remote-endpoint = <&ch7033_out>;
+			};
+		};
+	};
+};
+
+&i2c1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins>;
+	status = "okay";
+
+	hdmi-bridge@76 {
+		compatible = "chrontel,ch7033";
+		reg = <0x76>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				ch7033_in: endpoint {
+					remote-endpoint = <&tcon0_out_hdmi>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				ch7033_out: endpoint {
+					remote-endpoint = <&hdmi_con_in>;
+				};
+			};
+		};
+	};
+};
+
+&tcon0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&lcd_rgb565_pins>;
+};
+
+&tcon0_out {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	tcon0_out_hdmi: endpoint@0 {
+		reg = <0>;
+		remote-endpoint = <&ch7033_in>;
+	};
+};
