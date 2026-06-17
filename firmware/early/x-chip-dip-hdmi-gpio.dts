@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
 /*
- * CHIP HDMI DIP -- EXPERIMENTAL i2c-gpio (bitbang) variant of chip-dip-hdmi.
+ * CHIP HDMI DIP -- EXPERIMENTAL i2c-gpio (bitbang) variant of x-chip-dip-hdmi.
  *
  * Why: on hardware (two different HDMI boards) the sunxi mv64xxx i2c controller
  * ACKs the ch7033's address on a write but loses arbitration (status 0x38) the
@@ -14,7 +14,7 @@
  * SAME physical TWI1 pins (PB15=SCK, PB16=SDA). The hardware i2c@1c2b000 stays
  * disabled (base default) so it doesn't fight for the pins. CONFIG_I2C_GPIO=y.
  *
- * If this works it should replace chip-dip-hdmi.dts. If SDA/SCL look swapped
+ * If this works it should replace x-chip-dip-hdmi.dts. If SDA/SCL look swapped
  * (no ACK at all), swap the two *-gpios lines below.
  */
 

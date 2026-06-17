@@ -2,7 +2,7 @@
 /*
  * CHIP HDMI DIP -- Chrontel CH7033 RGB->HDMI bridge on i2c1 @ 0x76, fed by
  * TCON0's parallel RGB565 output. Device-tree overlay ported to mainline
- * sun5i-r8-chip (Linux 6.12) from NextThing's nextthingco/dip-hdmi.dts.
+ * sun5i-r8-chip (Linux 6.12) from NextThing's firmware/deprecated/dip-hdmi.dts.
  *
  * Pipeline: be0 -> tcon0 (RGB565) -> ch7033 -> hdmi-connector.
  * Needs CONFIG_DRM_CHRONTEL_CH7033 (added to nand.cfg) and a base dtb built with

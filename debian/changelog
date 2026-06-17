@@ -1,5 +1,13 @@
 chip-dt-overlays (0.8) trixie; urgency=high
 
+  * Rename the maintained mainline overlays to the x-chip-* convention:
+    x-chip-pocketchip, x-chip-dip-hdmi, x-chip-dip-vga, and the experimental
+    i2c-gpio (bitbang) HDMI variant x-chip-dip-hdmi-gpio. The bootscript DIP
+    auto-select (x-chip-os) references these by PID.
+  * Drop the superseded keyboard-only overlay (folded into x-chip-pocketchip).
+  * Move the original NextThing 4.4-era overlays and their EEPROM-PID symlinks
+    to firmware/deprecated/ (not built or shipped; kept for historical
+    reference only -- see firmware/deprecated/README.md).
   * Add full PocketCHIP overlay (chip-pocketchip): Olimex RGB panel + PWM
     backlight + resistive touch + TCA8418 keyboard, ported from the
     pocketchip-debian-builder mainline overlay (real-hardware validated).

@@ -2,7 +2,7 @@
 /*
  * CHIP VGA DIP -- a "dumb" (resistor-ladder) RGB->VGA DAC, fed by TCON0's
  * parallel RGB565 output, with EDID read over i2c1. Device-tree overlay ported
- * to mainline sun5i-r8-chip (Linux 6.12) from NextThing's nextthingco/dip-vga.dts.
+ * to mainline sun5i-r8-chip (Linux 6.12) from NextThing's firmware/deprecated/dip-vga.dts.
  *
  * Pipeline: be0 -> tcon0 (RGB565) -> dumb-vga-dac -> vga-connector.
  * Needs CONFIG_DRM_SIMPLE_BRIDGE (added to nand.cfg) and a base dtb built with
