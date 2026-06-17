@@ -47,6 +47,9 @@
 	#size-cells = <0>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&i2c1_pins>;
+	/* sunxi mv64xxx i2c locks up / loses arbitration on a marginal DIP bus at
+	 * the default 400 kHz -- run it slow for the ch7033 control + EDID DDC. */
+	clock-frequency = <100000>;
 	status = "okay";
 
 	hdmi-bridge@76 {
@@ -87,4 +90,16 @@
 		reg = <0>;
 		remote-endpoint = <&ch7033_in>;
 	};
+
+	/* drop the base composite (TVE) endpoint so tcon0 drives only the RGB
+	 * channel into the bridge -- matches the working PocketCHIP panel setup. */
+	endpoint@1 {
+		reg = <1>;
+		status = "disabled";
+		remote-endpoint = <0>;
+	};
+};
+
+&tve0 {
+	status = "disabled";
 };

@@ -1,3 +1,13 @@
+chip-dt-overlays (0.8) trixie; urgency=high
+
+  * Add full PocketCHIP overlay (chip-pocketchip): Olimex RGB panel + PWM
+    backlight + resistive touch + TCA8418 keyboard, ported from the
+    pocketchip-debian-builder mainline overlay (real-hardware validated).
+  * HDMI/VGA overlays: disable tve0 + the composite tcon0_out endpoint so
+    tcon0 drives only the RGB channel into the bridge/DAC.
+
+ -- Ben Young <computermouth@proton.me>  Fri, 12 Jun 2026 18:30:00 -0500
+
 chip-dt-overlays (0.7) trixie; urgency=high
 
   * Rebase overlays on current kernel output
