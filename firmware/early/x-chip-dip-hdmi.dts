@@ -5,21 +5,21 @@
  * sun5i-r8-chip (Linux 6.12) from NextThing's firmware/deprecated/dip-hdmi.dts.
  *
  * Pipeline: be0 -> tcon0 (RGB565) -> ch7033 -> hdmi-connector.
- * Needs CONFIG_DRM_CHRONTEL_CH7033 (added to nand.cfg) and a base dtb built with
- * `dtc -@`. External labels: &i2c1, &i2c1_pins, &tcon0, &tcon0_out.
+ * Needs CONFIG_DRM_CHRONTEL_CH7033 + CONFIG_DRM_DISPLAY_CONNECTOR (ch7033 defers
+ * until it finds the hdmi-connector on its port@1) and a base dtb built `dtc -@`.
+ * External labels: &i2c1, &i2c1_pins, &tcon0, &lcd_rgb565_pins, &tcon0_out, &tve0.
+ *
+ * IMPORTANT -- explicit `fragment { target-path = "/"; ... }` for the connector,
+ * NOT bare `/ { hdmi-connector {} }`: dtc auto-wraps `&label {}` into fragments
+ * but leaves bare root nodes as stray overlay-root nodes that `fdt apply` drops
+ * silently (so the connector never appears, ch7033 finds no next bridge). See the
+ * matching note in x-chip-dip-vga.dts.
  *
  * Mainline fixups vs the 4.4-era original:
  *   - i2c1 pin group: i2c1_pins_a -> i2c1_pins
  *   - base &i2c1 ships status="disabled" -> enable it here
- *   - dropped the /aliases i2c1 fragment (mainline references &i2c1 directly)
  *   - modern ch7033 binding: ports{port@0 in, port@1 out} + an explicit
  *     hdmi-connector (the old overlay only had the input port)
- *   - tcon0_out endpoint@0 (reg 0 = RGB channel) sits beside the base's
- *     endpoint@1 (composite/TVE, channel 1) -- no collision
- *
- * dtc emits one expected warning (graph_child_address) on the &tcon0_out
- * endpoint: compiled in isolation it sees a single endpoint, but the base port
- * already carries the composite endpoint, so the cells are needed post-merge.
  *
  * UNVERIFIED on hardware: mainline sun5i parallel-RGB + external bridge is
  * lightly used; the graph/connector wiring may need iteration with the DIP.
@@ -29,77 +29,92 @@
 /plugin/;
 
 / {
-	hdmi_connector: hdmi-connector {
-		compatible = "hdmi-connector";
-		type = "a";
-		ddc-i2c-bus = <&i2c1>;
-
-		port {
-			hdmi_con_in: endpoint {
-				remote-endpoint = <&ch7033_out>;
-			};
-		};
-	};
-};
-
-&i2c1 {
-	#address-cells = <1>;
-	#size-cells = <0>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&i2c1_pins>;
-	/* sunxi mv64xxx i2c locks up / loses arbitration on a marginal DIP bus at
-	 * the default 400 kHz -- run it slow for the ch7033 control + EDID DDC. */
-	clock-frequency = <100000>;
-	status = "okay";
-
-	hdmi-bridge@76 {
-		compatible = "chrontel,ch7033";
-		reg = <0x76>;
-
-		ports {
+	/* Enable i2c1 (slow -- the mv64xxx controller is marginal on the DIP bus)
+	 * and hang the ch7033 control/EDID bridge off it. */
+	fragment@0 {
+		target = <&i2c1>;
+		__overlay__ {
 			#address-cells = <1>;
 			#size-cells = <0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c1_pins>;
+			/* sunxi mv64xxx i2c locks up / loses arbitration on a marginal
+			 * DIP bus at the default 400 kHz -- run it slow. */
+			clock-frequency = <100000>;
+			status = "okay";
 
-			port@0 {
-				reg = <0>;
-				ch7033_in: endpoint {
-					remote-endpoint = <&tcon0_out_hdmi>;
-				};
-			};
+			hdmi-bridge@76 {
+				compatible = "chrontel,ch7033";
+				reg = <0x76>;
 
-			port@1 {
-				reg = <1>;
-				ch7033_out: endpoint {
-					remote-endpoint = <&hdmi_con_in>;
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@0 {
+						reg = <0>;
+						ch7033_in: endpoint {
+							remote-endpoint = <&tcon0_out_hdmi>;
+						};
+					};
+
+					port@1 {
+						reg = <1>;
+						ch7033_out: endpoint {
+							remote-endpoint = <&hdmi_con_in>;
+						};
+					};
 				};
 			};
 		};
 	};
-};
 
-&tcon0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&lcd_rgb565_pins>;
-};
-
-&tcon0_out {
-	#address-cells = <1>;
-	#size-cells = <0>;
-
-	tcon0_out_hdmi: endpoint@0 {
-		reg = <0>;
-		remote-endpoint = <&ch7033_in>;
+	/* Route TCON0's parallel RGB565 pins. */
+	fragment@1 {
+		target = <&tcon0>;
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <&lcd_rgb565_pins>;
+		};
 	};
 
-	/* drop the base composite (TVE) endpoint so tcon0 drives only the RGB
-	 * channel into the bridge -- matches the working PocketCHIP panel setup. */
-	endpoint@1 {
-		reg = <1>;
-		status = "disabled";
-		remote-endpoint = <0>;
+	/* Wire TCON0's RGB output (port@1, channel-0 endpoint) into the ch7033. */
+	fragment@2 {
+		target = <&tcon0_out>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			tcon0_out_hdmi: endpoint@0 {
+				reg = <0>;
+				remote-endpoint = <&ch7033_in>;
+			};
+		};
 	};
-};
 
-&tve0 {
-	status = "disabled";
+	/* Drop the composite (TVE) output so tcon0 drives only the RGB channel. */
+	fragment@3 {
+		target = <&tve0>;
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	/* Add the connector as a NEW root node -- MUST be a target-path="/"
+	 * fragment (see header note), not bare `/ { ... }`. */
+	fragment@4 {
+		target-path = "/";
+		__overlay__ {
+			hdmi_connector: hdmi-connector {
+				compatible = "hdmi-connector";
+				type = "a";
+				ddc-i2c-bus = <&i2c1>;
+
+				port {
+					hdmi_con_in: endpoint {
+						remote-endpoint = <&ch7033_out>;
+					};
+				};
+			};
+		};
+	};
 };

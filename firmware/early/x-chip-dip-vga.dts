@@ -5,22 +5,29 @@
  * to mainline sun5i-r8-chip (Linux 6.12) from NextThing's firmware/deprecated/dip-vga.dts.
  *
  * Pipeline: be0 -> tcon0 (RGB565) -> dumb-vga-dac -> vga-connector.
- * Needs CONFIG_DRM_SIMPLE_BRIDGE (added to nand.cfg) and a base dtb built with
- * `dtc -@`. External labels: &i2c1, &i2c1_pins, &tcon0, &tcon0_out.
+ * Needs CONFIG_DRM_SIMPLE_BRIDGE + CONFIG_DRM_DISPLAY_CONNECTOR (the dumb-vga-dac
+ * is NOT a leaf: its probe defers until it finds the vga-connector on port@1),
+ * and a base dtb built with `dtc -@`.
+ * External labels: &i2c1, &i2c1_pins, &tcon0, &lcd_rgb565_pins, &tcon0_out, &tve0.
+ *
+ * IMPORTANT -- why explicit `fragment { ... }` nodes instead of the `&label {}` /
+ * `/ { ... }` shorthand: dtc's /plugin/ mode auto-wraps `&label { }` into a
+ * fragment with a `target` phandle, but it does NOT wrap a bare `/ { newnode {} }`
+ * -- those stay as stray nodes in the overlay root, and `fdt apply` only merges
+ * `fragment@*` nodes, so root-node ADDITIONS made that way are silently dropped
+ * (the dac/connector never appear, tcon0 finds a dangling endpoint -> "No panel
+ * or bridge found"). Root additions MUST go in an explicit
+ * `fragment { target-path = "/"; __overlay__ { ... } }`. (This is exactly how the
+ * 4.4-era NextThing overlay did it; the first mainline port regressed it.)
  *
  * Mainline fixups vs the 4.4-era original:
  *   - i2c1 pin group: i2c1_pins_a -> i2c1_pins
  *   - base &i2c1 ships status="disabled" -> enable it here (for DDC/EDID)
- *   - dropped the /aliases i2c1 fragment (mainline references &i2c1 directly)
  *   - compatible "dumb-vga-bridge" -> "dumb-vga-dac" (mainline simple-bridge);
  *     modern binding wants ports{port@0 in, port@1 out} + a vga-connector that
  *     carries ddc-i2c-bus (the old overlay put ddc on the bridge, input port only)
  *   - tcon0_out endpoint@0 (reg 0 = RGB channel) sits beside the base's
  *     endpoint@1 (composite/TVE, channel 1) -- no collision
- *
- * dtc emits one expected warning (graph_child_address) on the &tcon0_out
- * endpoint: compiled in isolation it sees a single endpoint, but the base port
- * already carries the composite endpoint, so the cells are needed post-merge.
  *
  * UNVERIFIED on hardware: mainline sun5i parallel-RGB + external DAC is lightly
  * used; the graph/connector wiring may need iteration with the DIP.
@@ -30,70 +37,84 @@
 /plugin/;
 
 / {
-	vga_dac: vga-dac {
-		compatible = "dumb-vga-dac";
+	/* Enable i2c1 for the connector's DDC/EDID. */
+	fragment@0 {
+		target = <&i2c1>;
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c1_pins>;
+			status = "okay";
+		};
+	};
 
-		ports {
+	/* Route TCON0's parallel RGB565 pins. */
+	fragment@1 {
+		target = <&tcon0>;
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <&lcd_rgb565_pins>;
+		};
+	};
+
+	/* Wire TCON0's RGB output (port@1, channel-0 endpoint) into the DAC. */
+	fragment@2 {
+		target = <&tcon0_out>;
+		__overlay__ {
 			#address-cells = <1>;
 			#size-cells = <0>;
-
-			port@0 {
+			tcon0_out_vga: endpoint@0 {
 				reg = <0>;
-				vga_dac_in: endpoint {
-					remote-endpoint = <&tcon0_out_vga>;
-				};
-			};
-
-			port@1 {
-				reg = <1>;
-				vga_dac_out: endpoint {
-					remote-endpoint = <&vga_con_in>;
-				};
+				remote-endpoint = <&vga_dac_in>;
 			};
 		};
 	};
 
-	vga_connector: vga-connector {
-		compatible = "vga-connector";
-		ddc-i2c-bus = <&i2c1>;
+	/* Drop the composite (TVE) output so tcon0 drives only the RGB channel. */
+	fragment@3 {
+		target = <&tve0>;
+		__overlay__ {
+			status = "disabled";
+		};
+	};
 
-		port {
-			vga_con_in: endpoint {
-				remote-endpoint = <&vga_dac_out>;
+	/* Add the DAC + connector as NEW root nodes -- MUST be a target-path="/"
+	 * fragment (see header note), not bare `/ { ... }`. */
+	fragment@4 {
+		target-path = "/";
+		__overlay__ {
+			vga_dac: vga-dac {
+				compatible = "dumb-vga-dac";
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@0 {
+						reg = <0>;
+						vga_dac_in: endpoint {
+							remote-endpoint = <&tcon0_out_vga>;
+						};
+					};
+
+					port@1 {
+						reg = <1>;
+						vga_dac_out: endpoint {
+							remote-endpoint = <&vga_con_in>;
+						};
+					};
+				};
+			};
+
+			vga_connector: vga-connector {
+				compatible = "vga-connector";
+				ddc-i2c-bus = <&i2c1>;
+
+				port {
+					vga_con_in: endpoint {
+						remote-endpoint = <&vga_dac_out>;
+					};
+				};
 			};
 		};
 	};
-};
-
-&i2c1 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&i2c1_pins>;
-	status = "okay";
-};
-
-&tcon0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&lcd_rgb565_pins>;
-};
-
-&tcon0_out {
-	#address-cells = <1>;
-	#size-cells = <0>;
-
-	tcon0_out_vga: endpoint@0 {
-		reg = <0>;
-		remote-endpoint = <&vga_dac_in>;
-	};
-
-	/* drop the base composite (TVE) endpoint so tcon0 drives only the RGB
-	 * channel into the DAC -- matches the working PocketCHIP panel setup. */
-	endpoint@1 {
-		reg = <1>;
-		status = "disabled";
-		remote-endpoint = <0>;
-	};
-};
-
-&tve0 {
-	status = "disabled";
 };
